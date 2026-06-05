@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <title>FieldsEG Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@200..1000&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Cairo;
+            display: flex;
+            height: 100vh;
+            background-color: #f4f7f6;
+        }
+
+        .sidebar {
+            width: 220px;
+            background: #2c3e50;
+            color: #fff;
+            padding: 20px;
+        }
+
+        .sidebar a {
+            display: block;
+            margin: 15px 0;
+            cursor: pointer;
+            color: #bdc3c7;
+        }
+
+        .sidebar a:hover {
+            color: #fff;
+        }
+
+        .main {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+        }
+
+        .card {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #3498db;
+            color: #fff;
+            padding: 10px;
+        }
+
+        td {
+            padding: 10px;
+            text-align: center;
+            border: 1px solid #eee;
+        }
+
+        button {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: Cairo;
+        }
+
+        .btn-add { background: #27ae60; color: #fff; }
+        .btn-del { background: #e74c3c; color: #fff; }
+
+        input {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        #chartContainer {
+            max-width: 500px;
+            margin: 20px auto;
+        }
+    </style>
+</head>
+
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+    <h3>FieldsEG</h3>
+    <a onclick="showSection('home')">🏠 الرئيسية</a>
+    <a onclick="showSection('users')">👥 المستخدمين</a>
+    <a onclick="showSection('comments')">💬 التعليقات</a>
+    <a onclick="showSection('stats')">📊 البيانات</a>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+    <!-- HOME -->
+    <div id="homeSection" class="card">
+        <h2>Dashboard</h2>
+
+        <button class="btn-add" onclick="loadData()">🔄 تحديث البيانات</button>
+
+        <p>Users: <strong id="usersCount">0</strong></p>
+        <p>Comments: <strong id="commentsCount">0</strong></p>
+
+        <div id="chartContainer">
+            <canvas id="chartMain"></canvas>
+        </div>
+
+        <div id="chartContainer">
+            <canvas id="chartPie"></canvas>
+        </div>
+
+        <div id="chartContainer">
+            <canvas id="chartUsersComments"></canvas>
+        </div>
+    </div>
+
+    <!-- USERS -->
+    <div id="usersSection" class="card" style="display:none;">
+        <h3>Users</h3>
+        <input id="newUserName" placeholder="User name">
+        <button class="btn-add" onclick="addUser()">Add</button>
+        <table id="usersTable"></table>
+    </div>
+
+    <!-- COMMENTS -->
+    <div id="commentsSection" class="card" style="display:none;">
+        <h3>Comments</h3>
+        <input id="commentName" placeholder="Name">
+        <input id="commentText" placeholder="Comment">
+        <button class="btn-add" onclick="addComment()">Add</button>
+        <table id="commentsTable"></table>
+    </div>
+
+    <!-- STATS -->
+<div id="statsSection" class="card" style="display:none;">
+    <h3>System Data</h3>
+
+    <div>
+        <label>🏘️ Villages</label><br>
+        <input id="villages" placeholder="Enter villages count">
+    </div>
+
+    <div>
+        <label>🏢 Centers</label><br>
+        <input id="centers" placeholder="Enter centers count">
+    </div>
+
+    <div>
+        <label>🌍 Governrates</label><br>
+        <input id="governorates" placeholder="Enter governrates count">
+    </div>
+
+    <div>
+        <label>⚽ Players</label><br>
+        <input id="players" placeholder="Enter players count">
+    </div>
+
+    <div>
+        <label>👤 Predicted Users</label><br>
+        <input id="expectedUsers" placeholder="Enter predicted users">
+    </div>
+
+    <br>
+    <button class="btn-add" onclick="saveStats()">💾 Save</button>
+
+    <h4>📌 Current Data</h4>
+    <div id="statsDisplay"></div>
+</div>
+
+</div>
+
+<script>
+let allUsers = [], allComments = [], statsData = {};
+let mainChart, pieChart, userChart;
+
+const USERS_API = 'https://69dcf96584f912a264048d0a.mockapi.io/fields/users';
+const COMMENTS_API = 'https://69dcf96584f912a264048d0a.mockapi.io/fields/comments';
+const STATS_API = 'https://69ed5cefaf4ff533142bb99b.mockapi.io/organizationData';
+
+/* ================= LOAD ================= */
+async function loadData() {
+
+    allUsers = await (await fetch(USERS_API)).json();
+    allComments = await (await fetch(COMMENTS_API)).json();
+
+    let s = await fetch(STATS_API);
+    let arr = await s.json();
+    statsData = arr[0] || {};
+
+    updateCounts();
+
+    renderUsers();
+    renderComments();
+    renderStats();
+}
+
+/* ================= COUNTS ================= */
+function updateCounts() {
+    usersCount.innerText = allUsers.length;
+    commentsCount.innerText = allComments.length;
+    drawCharts();
+}
+
+/* ================= CHARTS ================= */
+function drawCharts() {
+
+    if (mainChart) mainChart.destroy();
+    if (pieChart) pieChart.destroy();
+    if (userChart) userChart.destroy();
+
+    /* BAR */
+    mainChart = new Chart(document.getElementById("chartMain"), {
+        type: "bar",
+        data: {
+            labels: ["Governrates", "Centers", "Villages"],
+            datasets: [{
+                data: [
+                    statsData.governrates || 0,
+                    statsData.centers || 0,
+                    statsData.villages || 0
+                ],
+                backgroundColor: ["#3498db", "#2ecc71", "#f39c12"]
+            }]
+        },
+        options: { plugins: { legend: { display: false } } }
+    });
+
+    /* PIE 1 */
+    pieChart = new Chart(document.getElementById("chartPie"), {
+        type: "pie",
+        data: {
+            labels: ["Players", "Predicted Users"],
+            datasets: [{
+                data: [
+                    statsData.players || 0,
+                    statsData.predicted_users || 0
+                ],
+                backgroundColor: ["#9b59b6", "#e74c3c"]
+            }]
+        }
+    });
+
+    /* PIE 2 */
+    userChart = new Chart(document.getElementById("chartUsersComments"), {
+        type: "pie",
+        data: {
+            labels: ["Users", "Comments"],
+            datasets: [{
+                data: [allUsers.length, allComments.length],
+                backgroundColor: ["#3498db", "#f1c40f"]
+            }]
+        }
+    });
+}
+
+/* ================= NAV ================= */
+function showSection(sec) {
+    ["homeSection", "usersSection", "commentsSection", "statsSection"]
+        .forEach(s => document.getElementById(s).style.display = "none");
+
+    document.getElementById(sec + "Section").style.display = "block";
+}
+
+/* ================= USERS ================= */
+function renderUsers() {
+    let t = usersTable;
+    t.innerHTML = "<tr><th>ID</th><th>Name</th><th>Delete</th></tr>";
+
+    allUsers.forEach(u => {
+        t.innerHTML += `
+        <tr>
+            <td>${u.id}</td>
+            <td>${u.name}</td>
+            <td><button class="btn-del" onclick="deleteUser('${u.id}')">X</button></td>
+        </tr>`;
+    });
+}
+
+async function addUser() {
+    let name = newUserName.value;
+    if (!name) return;
+
+    let res = await fetch(USERS_API, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({name})
+    });
+
+    allUsers.push(await res.json());
+    newUserName.value = "";
+    updateCounts();
+    renderUsers();
+}
+
+async function deleteUser(id) {
+    await fetch(`${USERS_API}/${id}`, {method:"DELETE"});
+    allUsers = allUsers.filter(u => u.id !== id);
+    updateCounts();
+    renderUsers();
+}
+
+/* ================= COMMENTS ================= */
+function renderComments() {
+    let t = commentsTable;
+    t.innerHTML = "<tr><th>Name</th><th>Comment</th><th>Delete</th></tr>";
+
+    allComments.forEach(c => {
+        t.innerHTML += `
+        <tr>
+            <td>${c.name}</td>
+            <td>${c.text}</td>
+            <td><button class="btn-del" onclick="deleteComment('${c.id}')">X</button></td>
+        </tr>`;
+    });
+}
+
+async function addComment() {
+    let name = commentName.value;
+    let text = commentText.value;
+
+    let res = await fetch(COMMENTS_API, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({name,text})
+    });
+
+    allComments.push(await res.json());
+    commentName.value = "";
+    commentText.value = "";
+
+    updateCounts();
+    renderComments();
+}
+
+async function deleteComment(id) {
+    await fetch(`${COMMENTS_API}/${id}`, {method:"DELETE"});
+    allComments = allComments.filter(c => c.id !== id);
+    updateCounts();
+    renderComments();
+}
+
+/* ================= STATS ================= */
+function renderStats() {
+
+    villages.value = statsData.villages || "";
+    centers.value = statsData.centers || "";
+    governorates.value = statsData.governrates || "";
+    players.value = statsData.players || "";
+    expectedUsers.value = statsData.predicted_users || "";
+
+    statsDisplay.innerHTML = `
+        <p>🏘️ Villages: ${statsData.villages || 0}</p>
+        <p>🏢 Centers: ${statsData.centers || 0}</p>
+        <p>🌍 Governrates: ${statsData.governrates || 0}</p>
+        <p>⚽ Players: ${statsData.players || 0}</p>
+        <p>👤 Predicted Users: ${statsData.predicted_users || 0}</p>
+    `;
+}
+
+/* ================= SAVE ================= */
+async function saveStats() {
+
+    let data = {
+        villages: villages.value,
+        centers: centers.value,
+        governrates: governorates.value,
+        players: players.value,
+        predicted_users: expectedUsers.value
+    };
+
+    if (!statsData.id) {
+        statsData = await (await fetch(STATS_API, {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body: JSON.stringify(data)
+        })).json();
+    } else {
+        await fetch(`${STATS_API}/${statsData.id}`, {
+            method:"PUT",
+            headers:{"Content-Type":"application/json"},
+            body: JSON.stringify(data)
+        });
+        statsData = {...statsData, ...data};
+    }
+
+    renderStats();
+    updateCounts();
+    alert("Saved ✔");
+}
+
+loadData();
+</script>
+
+</body>
+</html>
